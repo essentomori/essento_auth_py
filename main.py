@@ -1,29 +1,29 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+from jose import JWTError
 from pydantic import BaseModel
 
-SECRET_KEY = "super-secret-key-change-in-production"
-ALGORITHM = "HS256"
+# Импортируем готовые и безопасные функции из твоего модуля
+from auth_guide import hash_password, verify_password, generate_token, decode_token
+
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
+# База данных теперь использует правильную функцию хэширования
 fake_db = {
     "admin": {
         "username": "admin",
-        "hashed_password": pwd_context.hash("secret"),
+        "hashed_password": hash_password("secret"),
         "role": "admin"
     },
     "user": {
         "username": "user",
-        "hashed_password": pwd_context.hash("password"),
+        "hashed_password": hash_password("password"),
         "role": "user"
     }
 }
@@ -36,12 +36,6 @@ class User(BaseModel):
     username: str
     role: str
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
 def authenticate_user(username: str, password: str):
     user = fake_db.get(username)
     if not user:
@@ -52,9 +46,11 @@ def authenticate_user(username: str, password: str):
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    # Использование timezone.utc вместо устаревшего utcnow
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    # Передаем генерацию токена в auth_guide (он сам возьмет секрет из .env)
+    return generate_token(to_encode)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -63,7 +59,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Декодируем токен через auth_guide
+        payload = decode_token(token)
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception

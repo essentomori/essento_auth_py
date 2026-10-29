@@ -10,7 +10,7 @@ Basic authentication and authorization implementation examples in Python using F
 ## Setup
 
 ```bash
-pip install fastapi uvicorn passlib bcrypt python-jose
+pip install -r requirements.txt
 ```
 
 Run server:
